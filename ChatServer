@@ -1,0 +1,63 @@
+import java.io.*;
+import java.net.*;
+import java.util.*;
+public class ChatServer {
+    private static List<PrintWriter> clientWriters = new ArrayList<>();
+    public static void main(String[] args) {
+        int port = 12345; 
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
+            System.out.println("Server started on port " + port);
+            System.out.println("Waiting for clients...");
+            while (true) {
+                Socket clientSocket = serverSocket.accept(); 
+                System.out.println("Client connected: " + clientSocket.getInetAddress());
+                ClientHandler handler = new ClientHandler(clientSocket);
+                Thread thread = new Thread(handler);
+                thread.start();
+            }
+        } catch (IOException e) {
+            System.out.println("Server error: " + e.getMessage());
+        }
+    }
+    private static class ClientHandler implements Runnable {
+        private Socket socket;
+        private BufferedReader in;
+        private PrintWriter out;
+
+        public ClientHandler(Socket socket) {
+            this.socket = socket;
+        }
+        @Override
+        public void run() {
+            try {
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(socket.getOutputStream(), true);
+                synchronized (clientWriters) {
+                    clientWriters.add(out);
+                }
+                String message;
+                while ((message = in.readLine()) != null) {
+                    System.out.println("Received: " + message);
+                    broadcastMessage(message);
+                }
+
+            } catch (IOException e) {
+                System.out.println("Client disconnected: " + e.getMessage());
+            } finally {
+                try {
+                    socket.close();
+                } catch (IOException e) { }
+                synchronized (clientWriters) {
+                    clientWriters.remove(out);
+                }
+            }
+        }
+        private void broadcastMessage(String message) {
+            synchronized (clientWriters) {
+                for (PrintWriter writer : clientWriters) {
+                    writer.println(message);
+                }
+            }
+        }
+    }
+}
